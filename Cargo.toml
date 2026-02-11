@@ -1,0 +1,13 @@
+[package]
+name = "qc"
+version = "0.1.1"
+edition = "2024"
+
+[dependencies]
+bytecount = "0.6.9"
+crossbeam-channel = "0.5.15"
+ignore = "0.4.25"
+indicatif = "0.18.3"
+memmap2 = "0.9.9"
+num_cpus = "1.17.0"
+rayon = "1.11.0"
