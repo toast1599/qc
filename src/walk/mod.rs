@@ -6,6 +6,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use memmap2::Mmap;
 use std::{fs::File, path::Path};
 
+mod classify;
+use classify::classify_extension;
+
 pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     let (tx, rx) = unbounded();
 
@@ -20,7 +23,8 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
         .threads(num_cpus::get())
         .build_parallel()
         .run(|| {
-            let (tx, pb) = (tx.clone(), pb.clone());
+            let tx = tx.clone();
+            let pb = pb.clone();
 
             Box::new(move |entry| {
                 let Ok(entry) = entry else {
@@ -34,14 +38,8 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
 
                 pb.inc(1);
 
-                match process_file(path) {
-                    Ok(result) => {
-                        let _ = tx.send(result);
-                    }
-                    Err(result) => {
-                        let _ = tx.send(result);
-                    }
-                }
+                let result = process_file(path);
+                let _ = tx.send(result);
 
                 WalkState::Continue
             })
@@ -49,49 +47,49 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
 
     pb.finish_with_message("Done");
     drop(tx);
+
     rx.into_iter().collect()
 }
 
 /// Processes a single file and always returns a FileResult.
-/// Errors are surfaced, not silently ignored.
-fn process_file(path: &Path) -> Result<FileResult, FileResult> {
-    let file = File::open(path).map_err(|_| error_result(path))?;
+/// Errors are represented explicitly as zeroed results.
+fn process_file(path: &Path) -> FileResult {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return error_result(path),
+    };
 
-    let mmap = unsafe { Mmap::map(&file) }.map_err(|_| error_result(path))?;
+    let mmap = match unsafe { Mmap::map(&file) } {
+        Ok(m) => m,
+        Err(_) => return error_result(path),
+    };
 
-    // Heuristic: if file contains NUL bytes, treat as binary
-    if mmap.iter().any(|&b| b == 0) {
-        return Ok(binary_result(path, mmap.len() as u64));
+    if is_binary(&mmap) {
+        return binary_result(path, mmap.len() as u64);
     }
 
     let (code, comment, blank) = count_lines(&mmap);
 
-    Ok(FileResult {
+    FileResult {
         path: path.to_path_buf(),
-        extension: classify_extension(path),
+        lang: classify_extension(path),
         code,
         comment,
         blank,
         bytes: mmap.len() as u64,
-    })
-}
-
-/// Explicit, lossless extension classification.
-fn classify_extension(path: &Path) -> String {
-    match path.extension() {
-        None => "none".into(),
-        Some(ext) => match ext.to_str() {
-            Some(s) => s.to_lowercase(),
-            None => "non-utf8".into(),
-        },
     }
 }
 
-/// Result for binary files: counted, but not misclassified.
+/// Binary heuristic: NUL byte detection.
+fn is_binary(data: &[u8]) -> bool {
+    data.iter().any(|&b| b == 0)
+}
+
+/// Result for binary files.
 fn binary_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        extension: classify_extension(path),
+        lang: classify_extension(path),
         code: 0,
         comment: 0,
         blank: 0,
@@ -103,7 +101,7 @@ fn binary_result(path: &Path, bytes: u64) -> FileResult {
 fn error_result(path: &Path) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        extension: classify_extension(path),
+        lang: classify_extension(path),
         code: 0,
         comment: 0,
         blank: 0,
@@ -112,10 +110,12 @@ fn error_result(path: &Path) -> FileResult {
 }
 
 /// Fast, byte-level line counting.
-/// NOTE: This is a heuristic and not a language parser.
-/// Comment detection is approximate by design.
+/// This is a heuristic, not a language parser.
 fn count_lines(data: &[u8]) -> (usize, usize, usize) {
-    let (mut code, mut comment, mut blank, mut in_block) = (0, 0, 0, false);
+    let mut code = 0;
+    let mut comment = 0;
+    let mut blank = 0;
+    let mut in_block = false;
 
     for line in data.split(|&b| b == b'\n') {
         let first = line.iter().position(|&b| !b.is_ascii_whitespace());
