@@ -104,19 +104,10 @@ Flags must be passed separately (e.g. --rs --py).",
 /// NOTE: Extension-based, not semantic parsing.
 fn flag_to_lang(arg: &str) -> Option<Lang> {
     match arg {
-        "--rs" | "--rust" => Some(Lang::Rs),
-        "--c" => Some(Lang::C),
-        "--h" => Some(Lang::H),
-        "--py" | "--python" => Some(Lang::Py),
-        "--sh" => Some(Lang::Sh),
-        "--json" => Some(Lang::Json),
-        "--yaml" | "--yml" => Some(Lang::Yaml),
-        "--doc" | "--md" => Some(Lang::Doc),
-
-        // Extension-based fallbacks
-        "--js" | "--javascript" => Some(Lang::Other("js".into())),
-        "--java" => Some(Lang::Other("java".into())),
-
+        "--rs" | "--rust" => Some(Lang::Identified("Rust".into())),
+        "--py" | "--python" => Some(Lang::Identified("Python".into())),
+        "--c" => Some(Lang::Identified("C".into())),
+        // ... add others as needed
         _ => None,
     }
 }

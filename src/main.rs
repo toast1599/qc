@@ -1,4 +1,5 @@
 // src/main.rs
+mod assets;
 mod walk;
 mod result;
 mod output;

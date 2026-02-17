@@ -1,16 +1,22 @@
-// src/walk.rs
+// src/walk/mod.rs
+
 use crate::result::FileResult;
-use crossbeam_channel::unbounded;
+use crate::result::Lang;
+use crossbeam_channel;
 use ignore::{WalkBuilder, WalkState};
 use indicatif::{ProgressBar, ProgressStyle};
-use memmap2::Mmap;
-use std::{fs::File, path::Path};
+use std::path::Path;
 
 mod classify;
-use classify::classify_extension;
+mod analyze;
+mod io;
+
+use classify::classify_file;
+use analyze::{is_binary, count_lines};
+use io::map_file;
 
 pub fn parallel_scan(root: &str) -> Vec<FileResult> {
-    let (tx, rx) = unbounded();
+    let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 64);
 
     let pb = ProgressBar::new_spinner().with_style(
         ProgressStyle::default_spinner()
@@ -19,7 +25,11 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     );
     pb.set_message("Auditing");
 
+    // --- THE FIX IS HERE ---
     WalkBuilder::new(root)
+        .hidden(true)       // This skips .git, .gitignore, and hidden system files
+        .git_ignore(true)    // This skips anything listed in your .gitignore (like /target)
+        .git_global(true)    // Optional: respects your global git settings
         .threads(num_cpus::get())
         .build_parallel()
         .run(|| {
@@ -27,17 +37,22 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
             let pb = pb.clone();
 
             Box::new(move |entry| {
-                let Ok(entry) = entry else {
-                    return WalkState::Continue;
-                };
+                let Ok(entry) = entry else { return WalkState::Continue; };
+                
+                // Ensure we only look at files, not directory entries
+                if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    return WalkState::Continue; 
+                }
 
                 let path = entry.path();
-                if !path.is_file() {
+                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                
+                // Skip the lockfile as requested
+                if name == "Cargo.lock" || name == ".DS_Store" {
                     return WalkState::Continue;
                 }
 
                 pb.inc(1);
-
                 let result = process_file(path);
                 let _ = tx.send(result);
 
@@ -47,49 +62,51 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
 
     pb.finish_with_message("Done");
     drop(tx);
-
     rx.into_iter().collect()
 }
 
 /// Processes a single file and always returns a FileResult.
 /// Errors are represented explicitly as zeroed results.
 fn process_file(path: &Path) -> FileResult {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return error_result(path),
+    let mmap = match map_file(path) {
+        Some(m) => m,
+        None => return error_result(path),
     };
 
-    let mmap = match unsafe { Mmap::map(&file) } {
-        Ok(m) => m,
-        Err(_) => return error_result(path),
-    };
+    let bytes = mmap.len() as u64;
 
-    if is_binary(&mmap) {
-        return binary_result(path, mmap.len() as u64);
+    if bytes == 0 {
+        return FileResult {
+            path: path.to_path_buf(),
+            lang: classify_file(path, &[]),
+            code: 0,
+            comment: 0,
+            blank: 0,
+            bytes: 0,
+        };
     }
 
-    let (code, comment, blank) = count_lines(&mmap);
+    if is_binary(&mmap) {
+        return binary_result(path, bytes);
+    }
 
+    let lang = classify_file(path, &mmap); 
+    let (code, comment, blank) = count_lines(&mmap, &lang);
     FileResult {
         path: path.to_path_buf(),
-        lang: classify_extension(path),
+        lang,
         code,
         comment,
         blank,
-        bytes: mmap.len() as u64,
+        bytes,
     }
-}
-
-/// Binary heuristic: NUL byte detection.
-fn is_binary(data: &[u8]) -> bool {
-    data.iter().any(|&b| b == 0)
 }
 
 /// Result for binary files.
 fn binary_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        lang: classify_extension(path),
+        lang: Lang::NonUtf8,
         code: 0,
         comment: 0,
         blank: 0,
@@ -101,54 +118,11 @@ fn binary_result(path: &Path, bytes: u64) -> FileResult {
 fn error_result(path: &Path) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        lang: classify_extension(path),
+        // FIX 2: Since we have no content on error, pass an empty slice
+        lang: classify_file(path, &[]), 
         code: 0,
         comment: 0,
         blank: 0,
         bytes: 0,
     }
-}
-
-/// Fast, byte-level line counting.
-/// This is a heuristic, not a language parser.
-fn count_lines(data: &[u8]) -> (usize, usize, usize) {
-    let mut code = 0;
-    let mut comment = 0;
-    let mut blank = 0;
-    let mut in_block = false;
-
-    for line in data.split(|&b| b == b'\n') {
-        let first = line.iter().position(|&b| !b.is_ascii_whitespace());
-
-        match first {
-            None => {
-                if in_block {
-                    comment += 1;
-                } else {
-                    blank += 1;
-                }
-            }
-            Some(pos) => {
-                let rest = &line[pos..];
-
-                if in_block {
-                    comment += 1;
-                    if rest.windows(2).any(|w| w == b"*/") {
-                        in_block = false;
-                    }
-                } else if rest.starts_with(b"//") || rest.starts_with(b"#") {
-                    comment += 1;
-                } else if rest.starts_with(b"/*") {
-                    comment += 1;
-                    if !rest.windows(2).any(|w| w == b"*/") {
-                        in_block = true;
-                    }
-                } else {
-                    code += 1;
-                }
-            }
-        }
-    }
-
-    (code, comment, blank)
 }

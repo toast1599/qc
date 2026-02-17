@@ -1,21 +1,16 @@
 // src/result.rs
 use std::path::PathBuf;
 
+/// Language classification for files.
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Lang {
-    C,
-    H,
-    Rs,
-    Py,
-    Sh,
-    Json,
-    Yaml,
-    Doc,
+    /// We keep these special cases
     None,
     NonUtf8,
-    Other(String),
+    /// This now covers EVERYTHING in the YAML
+    Identified(String), 
 }
-
 pub struct FileResult {
     pub path: PathBuf,
     pub lang: Lang,
