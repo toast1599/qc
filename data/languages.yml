@@ -1,0 +1,34 @@
+# data/languages.yml
+Rust:
+  type: programming
+  color: "#dea584"
+  extensions:
+    - ".rs"
+    - ".rs.in"
+
+Python:
+  type: programming
+  color: "#3572A5"
+  extensions:
+    - ".py"
+    - ".pyi"
+  filenames:
+    - "SConstruct"
+
+C:
+  type: programming
+  color: "#555555"
+  extensions:
+    - ".c"
+    - ".h"
+
+Makefile:
+  type: programming
+  color: "#427819"
+  extensions:
+    - ".mak"
+    - ".mk"
+  filenames:
+    - "Makefile"
+    - "makefile"
+    - "Gnumakefile"
