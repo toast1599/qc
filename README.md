@@ -40,7 +40,7 @@ qc .
 ### Options
 * `qc [path]` - Scan a specific directory.
 * `qc -<number>` - Limit the "Top Files" list to N results (e.g., `qc -5`).
-* `qc -h # or qc --help` - Show the help message.
+* `qc -h [or] qc --help` - Show the help message.
 
 ## Performance
 `qc` is built to be faster than traditional `wc -l` loops by using byte-level scanning and avoiding unnecessary UTF-8 validation where possible.
