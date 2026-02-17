@@ -1,6 +1,6 @@
 # qc (Quick Count) 🚀
 
-A blazingly fast source code auditor and line counter built in Rust. 
+A faster source code auditor and line counter built in Rust. 
 
 `qc` is designed to give you an instant breakdown of your codebase composition. It uses **Memory Mapping (Mmap)** and **Parallel Directory Walking** to scan thousands of files in milliseconds.
 
@@ -29,7 +29,7 @@ Ensure you have the Rust toolchain installed.
    ```
    *This will place the `qc` binary in your `~/.cargo/bin` directory.*
 
-## 🛠 Usage
+## Usage
 
 Run `qc` in any directory to start an audit:
 
@@ -40,7 +40,7 @@ qc .
 ### Options
 * `qc [path]` - Scan a specific directory.
 * `qc -<number>` - Limit the "Top Files" list to N results (e.g., `qc -5`).
-* `qc --help` - Show the help message.
+* `qc -h # or qc --help` - Show the help message.
 
 ## Performance
 `qc` is built to be faster than traditional `wc -l` loops by using byte-level scanning and avoiding unnecessary UTF-8 validation where possible.
