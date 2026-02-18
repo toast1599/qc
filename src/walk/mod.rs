@@ -6,6 +6,7 @@ use crossbeam_channel;
 use ignore::{WalkBuilder, WalkState};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
+use std::fs;
 
 mod classify;
 mod analyze;
@@ -33,22 +34,25 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
         .run(|| {
             let tx = tx.clone();
             let pb = pb.clone();
-            let mut local_count = 0; // NEW: Local counter for this thread
+            let mut local_count = 0;
 
             Box::new(move |entry| {
                 let Ok(entry) = entry else { return WalkState::Continue; };
+                
                 if !entry.file_type().map_or(false, |ft| ft.is_file()) {
                     return WalkState::Continue; 
                 }
 
-                // FIX: Only update the progress bar every 100 files
+                // Optimization: Get metadata from entry to avoid redundant syscall
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
                 local_count += 1;
-                if local_count >= 100 {
-                    pb.inc(100);
+                if local_count >= 500 {
+                    pb.inc(500);
                     local_count = 0;
                 }
 
-                let result = process_file(entry.path());
+                let result = process_file(entry.path(), size);
                 let _ = tx.send(result);
 
                 WalkState::Continue
@@ -60,16 +64,7 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     rx.into_iter().collect()
 }
 
-/// Processes a single file and always returns a FileResult.
-/// Errors are represented explicitly as zeroed results.
-fn process_file(path: &Path) -> FileResult {
-    // 1. Get metadata first to check size without opening/mapping
-    let metadata = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(_) => return error_result(path),
-    };
-    let bytes = metadata.len();
-
+fn process_file(path: &Path, bytes: u64) -> FileResult {
     if bytes == 0 {
         return FileResult {
             path: path.to_path_buf(),
@@ -78,30 +73,27 @@ fn process_file(path: &Path) -> FileResult {
         };
     }
 
-    // 2. Hybrid I/O: mmap is slow for small files
-    // Use an enum or separate variables to manage the lifetime of the data
-    let (code, comment, blank, lang) = if bytes > 16 * 1024 {
-        match map_file(path) {
-            Some(mmap) => {
-                if is_binary(&mmap) { return binary_result(path, bytes); }
-                let l = classify_file(path, &mmap);
-                let (co, cm, bl) = count_lines(&mmap, &l);
-                (co, cm, bl, l)
-            }
-            None => return error_result(path),
+    // Hybrid I/O logic
+    if bytes > 16 * 1024 {
+        if let Some(mmap) = map_file(path) {
+            return analyze_data(path, &mmap, bytes);
         }
-    } else {
-        match std::fs::read(path) {
-            Ok(buf) => {
-                if is_binary(&buf) { return binary_result(path, bytes); }
-                let l = classify_file(path, &buf);
-                let (co, cm, bl) = count_lines(&buf, &l);
-                (co, cm, bl, l)
-            }
-            Err(_) => return error_result(path),
-        }
-    };
+    } 
+    
+    if let Ok(buf) = fs::read(path) {
+        return analyze_data(path, &buf, bytes);
+    }
 
+    error_result(path, bytes)
+}
+
+fn analyze_data(path: &Path, data: &[u8], bytes: u64) -> FileResult {
+    if is_binary(data) {
+        return binary_result(path, bytes);
+    }
+
+    let lang = classify_file(path, data); 
+    let (code, comment, blank) = count_lines(data, &lang);
     FileResult {
         path: path.to_path_buf(),
         lang,
@@ -112,27 +104,18 @@ fn process_file(path: &Path) -> FileResult {
     }
 }
 
-/// Result for binary files.
 fn binary_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
         lang: Lang::NonUtf8,
-        code: 0,
-        comment: 0,
-        blank: 0,
-        bytes,
+        code: 0, comment: 0, blank: 0, bytes,
     }
 }
 
-/// Result for unreadable or unmappable files.
-fn error_result(path: &Path) -> FileResult {
+fn error_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        // FIX 2: Since we have no content on error, pass an empty slice
-        lang: classify_file(path, &[]), 
-        code: 0,
-        comment: 0,
-        blank: 0,
-        bytes: 0,
+        lang: Lang::None,
+        code: 0, comment: 0, blank: 0, bytes,
     }
 }
