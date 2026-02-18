@@ -17,9 +17,6 @@ pub fn is_binary(data: &[u8]) -> bool {
         }
     }
 
-    // Heuristic: If we find a NUL, it's binary UNLESS it looks like UTF-16 text
-    // (every other byte is NUL). For simplicity, we'll still be conservative but
-    // avoid the most common "accidental" binary detections.
     let nul_count = data.iter().filter(|&&b| b == 0).count();
     if nul_count == 0 {
         return false;
@@ -30,8 +27,7 @@ pub fn is_binary(data: &[u8]) -> bool {
         return true;
     }
 
-    // Default to the original NUL check for small numbers of NULs
-    nul_count > 0
+    false
 }
 
 fn is_hash_comment_lang(lang: &Lang) -> bool {
@@ -48,13 +44,19 @@ fn is_hash_comment_lang(lang: &Lang) -> bool {
 ///
 /// Handles string literals, inline comments, and block comments.
 pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
+    if data.is_empty() {
+        return (0, 0, 0);
+    }
+
+    let data = data.strip_suffix(b"\n").unwrap_or(data);
+    let data = data.strip_suffix(b"\r").unwrap_or(data);
+
     let mut code = 0;
     let mut comment = 0;
     let mut blank = 0;
     let mut in_block = false;
     let hash_comments = is_hash_comment_lang(lang);
 
-    // FIX: Remove .collect(). Iterate over the Split iterator directly.
     for line in data.split(|&b| b == b'\n') {
         let first_char = line.iter().position(|&b| !b.is_ascii_whitespace());
 
@@ -80,7 +82,6 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
                             i += 1;
                         }
                     } else {
-                        // We skip string logic for speed; it's rarely needed for audits
                         if b.is_ascii_whitespace() {
                         } else if i + 1 < line.len() && b == b'/' && line[i + 1] == b'/' {
                             has_comment = true;
@@ -113,53 +114,48 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
 mod tests {
     use super::*;
 
+    fn rs() -> Lang { Lang::Identified("Rust".into()) }
+    fn py() -> Lang { Lang::Identified("Python".into()) }
+
     #[test]
     fn test_empty_file() {
-        assert_eq!(count_lines(b"", &Lang::Rs), (0, 0, 0));
+        assert_eq!(count_lines(b"", &rs()), (0, 0, 0));
     }
 
     #[test]
     fn test_trailing_newline() {
-        assert_eq!(count_lines(b"line1\n", &Lang::Rs), (1, 0, 0));
-        assert_eq!(count_lines(b"line1\n\n", &Lang::Rs), (1, 0, 1));
+        assert_eq!(count_lines(b"line1\n", &rs()), (1, 0, 0));
+        assert_eq!(count_lines(b"line1\n\n", &rs()), (1, 0, 1));
     }
 
     #[test]
     fn test_inline_comments() {
-        assert_eq!(count_lines(b"code(); // comment", &Lang::Rs), (1, 0, 0));
-        assert_eq!(count_lines(b"// full comment", &Lang::Rs), (0, 1, 0));
+        assert_eq!(count_lines(b"code(); // comment", &rs()), (1, 0, 0));
+        assert_eq!(count_lines(b"// full comment", &rs()), (0, 1, 0));
     }
 
     #[test]
     fn test_string_markers() {
-        assert_eq!(
-            count_lines(b"let x = \"// not a comment\";", &Lang::Rs),
-            (1, 0, 0)
-        );
-        assert_eq!(
-            count_lines(b"let x = \"/* not a block */\";", &Lang::Rs),
-            (1, 0, 0)
-        );
+        assert_eq!(count_lines(b"let x = \"// not a comment\";", &rs()), (1, 0, 0));
+        assert_eq!(count_lines(b"let x = \"/* not a block */\";", &rs()), (1, 0, 0));
     }
 
     #[test]
     fn test_multiline_string() {
         let data = b"let x = \"\n continuation\n \";";
-        assert_eq!(count_lines(data, &Lang::Rs), (3, 0, 0));
+        assert_eq!(count_lines(data, &rs()), (3, 0, 0));
     }
 
     #[test]
     fn test_hash_logic() {
-        // Rust: # is not a comment
-        assert_eq!(count_lines(b"#attribute", &Lang::Rs), (1, 0, 0));
-        // Python: # is a comment
-        assert_eq!(count_lines(b"# comment", &Lang::Py), (0, 1, 0));
+        assert_eq!(count_lines(b"#attribute", &rs()), (1, 0, 0));
+        assert_eq!(count_lines(b"# comment", &py()), (0, 1, 0));
     }
 
     #[test]
     fn test_block_comments() {
         let data = b"/*\n multi\n line\n */";
-        assert_eq!(count_lines(data, &Lang::Rs), (0, 4, 0));
+        assert_eq!(count_lines(data, &rs()), (0, 4, 0));
     }
 
     #[test]
