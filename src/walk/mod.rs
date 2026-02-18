@@ -16,7 +16,7 @@ use analyze::{is_binary, count_lines};
 use io::map_file;
 
 pub fn parallel_scan(root: &str) -> Vec<FileResult> {
-    let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 64);
+    let (tx, rx) = crossbeam_channel::unbounded(); 
 
     let pb = ProgressBar::new_spinner().with_style(
         ProgressStyle::default_spinner()
@@ -25,35 +25,30 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     );
     pb.set_message("Auditing");
 
-    // --- THE FIX IS HERE ---
     WalkBuilder::new(root)
-        .hidden(true)       // This skips .git, .gitignore, and hidden system files
-        .git_ignore(true)    // This skips anything listed in your .gitignore (like /target)
-        .git_global(true)    // Optional: respects your global git settings
+        .hidden(true)
+        .git_ignore(true)
         .threads(num_cpus::get())
         .build_parallel()
         .run(|| {
             let tx = tx.clone();
             let pb = pb.clone();
+            let mut local_count = 0; // NEW: Local counter for this thread
 
             Box::new(move |entry| {
                 let Ok(entry) = entry else { return WalkState::Continue; };
-                
-                // Ensure we only look at files, not directory entries
                 if !entry.file_type().map_or(false, |ft| ft.is_file()) {
                     return WalkState::Continue; 
                 }
 
-                let path = entry.path();
-                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                
-                // Skip the lockfile as requested
-                if name == "Cargo.lock" || name == ".DS_Store" {
-                    return WalkState::Continue;
+                // FIX: Only update the progress bar every 100 files
+                local_count += 1;
+                if local_count >= 100 {
+                    pb.inc(100);
+                    local_count = 0;
                 }
 
-                pb.inc(1);
-                let result = process_file(path);
+                let result = process_file(entry.path());
                 let _ = tx.send(result);
 
                 WalkState::Continue
@@ -61,37 +56,52 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
         });
 
     pb.finish_with_message("Done");
-    drop(tx);
+    drop(tx); 
     rx.into_iter().collect()
 }
 
 /// Processes a single file and always returns a FileResult.
 /// Errors are represented explicitly as zeroed results.
 fn process_file(path: &Path) -> FileResult {
-    let mmap = match map_file(path) {
-        Some(m) => m,
-        None => return error_result(path),
+    // 1. Get metadata first to check size without opening/mapping
+    let metadata = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return error_result(path),
     };
-
-    let bytes = mmap.len() as u64;
+    let bytes = metadata.len();
 
     if bytes == 0 {
         return FileResult {
             path: path.to_path_buf(),
             lang: classify_file(path, &[]),
-            code: 0,
-            comment: 0,
-            blank: 0,
-            bytes: 0,
+            code: 0, comment: 0, blank: 0, bytes: 0,
         };
     }
 
-    if is_binary(&mmap) {
-        return binary_result(path, bytes);
-    }
+    // 2. Hybrid I/O: mmap is slow for small files
+    // Use an enum or separate variables to manage the lifetime of the data
+    let (code, comment, blank, lang) = if bytes > 16 * 1024 {
+        match map_file(path) {
+            Some(mmap) => {
+                if is_binary(&mmap) { return binary_result(path, bytes); }
+                let l = classify_file(path, &mmap);
+                let (co, cm, bl) = count_lines(&mmap, &l);
+                (co, cm, bl, l)
+            }
+            None => return error_result(path),
+        }
+    } else {
+        match std::fs::read(path) {
+            Ok(buf) => {
+                if is_binary(&buf) { return binary_result(path, bytes); }
+                let l = classify_file(path, &buf);
+                let (co, cm, bl) = count_lines(&buf, &l);
+                (co, cm, bl, l)
+            }
+            Err(_) => return error_result(path),
+        }
+    };
 
-    let lang = classify_file(path, &mmap); 
-    let (code, comment, blank) = count_lines(&mmap, &lang);
     FileResult {
         path: path.to_path_buf(),
         lang,

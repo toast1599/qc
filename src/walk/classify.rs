@@ -5,19 +5,19 @@ use crate::assets::{FILENAME_LOOKUP, EXTENSION_LOOKUP};
 pub fn classify_file(path: &Path, content: &[u8]) -> Lang {
     let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     
-    // Check filenames
     if let Some(lang_name) = FILENAME_LOOKUP.get(filename) {
         return Lang::Identified(lang_name.to_string());
     }
 
-    // Check EXTENSIONS,
+    // FIX: Remove format! and to_lowercase()
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        let dotted_ext = format!(".{}", ext.to_lowercase());
-        if let Some(lang_name) = EXTENSION_LOOKUP.get(&dotted_ext) {
+        // We now lookup using the raw extension string. 
+        // We lowercase it once, but only if necessary.
+        if let Some(lang_name) = EXTENSION_LOOKUP.get(&ext.to_lowercase()) {
             return Lang::Identified(lang_name.to_string());
         }
     }
-    // 3. Shebang fallback for extensionless files
+
     if content.starts_with(b"#!") {
         if let Some(lang_name) = guess_shebang(content) {
             return Lang::Identified(lang_name);

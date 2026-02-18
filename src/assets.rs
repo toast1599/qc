@@ -26,7 +26,9 @@ pub static EXTENSION_LOOKUP: Lazy<HashMap<String, String>> = Lazy::new(|| {
     for (name, lang) in LANG_MAP.iter() {
         if let Some(exts) = &lang.extensions {
             for ext in exts {
-                map.insert(ext.clone(), name.clone());
+                // FIX: Store extensions without the leading dot and in lowercase
+                let clean_ext = ext.trim_start_matches('.').to_lowercase();
+                map.insert(clean_ext, name.clone());
             }
         }
     }
@@ -38,6 +40,7 @@ pub static FILENAME_LOOKUP: Lazy<HashMap<String, String>> = Lazy::new(|| {
     for (name, lang) in LANG_MAP.iter() {
         if let Some(files) = &lang.filenames {
             for f in files {
+                // Keep filenames as they are, but ensures clones happen once at startup
                 map.insert(f.clone(), name.clone());
             }
         }
