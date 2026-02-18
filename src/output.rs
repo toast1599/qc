@@ -84,8 +84,6 @@ pub fn print_results(results: &mut [FileResult], top_n: usize, elapsed: Duration
         t_blnk,
         elapsed
     );
-    println!("* Comm = line-start heuristic, not language-aware\n");
-
     println!("{}--- 📚 LANGUAGE BREAKDOWN ---{}", cyn, rst);
     println!(
         "{:<12} | {:>10} | {:>8} | {:>8} | {:>10}\n{}",
