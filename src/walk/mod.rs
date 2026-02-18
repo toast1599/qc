@@ -5,19 +5,19 @@ use crate::result::Lang;
 use crossbeam_channel;
 use ignore::{WalkBuilder, WalkState};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
-mod classify;
 mod analyze;
+mod classify;
 mod io;
 
+use analyze::{count_lines, is_binary};
 use classify::classify_file;
-use analyze::{is_binary, count_lines};
 use io::map_file;
 
 pub fn parallel_scan(root: &str) -> Vec<FileResult> {
-    let (tx, rx) = crossbeam_channel::unbounded(); 
+    let (tx, rx) = crossbeam_channel::unbounded();
 
     let pb = ProgressBar::new_spinner().with_style(
         ProgressStyle::default_spinner()
@@ -37,10 +37,12 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
             let mut local_count = 0;
 
             Box::new(move |entry| {
-                let Ok(entry) = entry else { return WalkState::Continue; };
-                
+                let Ok(entry) = entry else {
+                    return WalkState::Continue;
+                };
+
                 if !entry.file_type().map_or(false, |ft| ft.is_file()) {
-                    return WalkState::Continue; 
+                    return WalkState::Continue;
                 }
 
                 // Optimization: Get metadata from entry to avoid redundant syscall
@@ -60,7 +62,7 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
         });
 
     pb.finish_with_message("Done");
-    drop(tx); 
+    drop(tx);
     rx.into_iter().collect()
 }
 
@@ -69,7 +71,10 @@ fn process_file(path: &Path, bytes: u64) -> FileResult {
         return FileResult {
             path: path.to_path_buf(),
             lang: classify_file(path, &[]),
-            code: 0, comment: 0, blank: 0, bytes: 0,
+            code: 0,
+            comment: 0,
+            blank: 0,
+            bytes: 0,
         };
     }
 
@@ -78,8 +83,8 @@ fn process_file(path: &Path, bytes: u64) -> FileResult {
         if let Some(mmap) = map_file(path) {
             return analyze_data(path, &mmap, bytes);
         }
-    } 
-    
+    }
+
     if let Ok(buf) = fs::read(path) {
         return analyze_data(path, &buf, bytes);
     }
@@ -92,7 +97,7 @@ fn analyze_data(path: &Path, data: &[u8], bytes: u64) -> FileResult {
         return binary_result(path, bytes);
     }
 
-    let lang = classify_file(path, data); 
+    let lang = classify_file(path, data);
     let (code, comment, blank) = count_lines(data, &lang);
     FileResult {
         path: path.to_path_buf(),
@@ -108,7 +113,10 @@ fn binary_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
         lang: Lang::NonUtf8,
-        code: 0, comment: 0, blank: 0, bytes,
+        code: 0,
+        comment: 0,
+        blank: 0,
+        bytes,
     }
 }
 
@@ -116,6 +124,9 @@ fn error_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
         lang: Lang::None,
-        code: 0, comment: 0, blank: 0, bytes,
+        code: 0,
+        comment: 0,
+        blank: 0,
+        bytes,
     }
 }

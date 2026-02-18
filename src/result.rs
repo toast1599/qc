@@ -9,7 +9,7 @@ pub enum Lang {
     None,
     NonUtf8,
     /// This now covers EVERYTHING in the YAML
-    Identified(String), 
+    Identified(String),
 }
 pub struct FileResult {
     pub path: PathBuf,

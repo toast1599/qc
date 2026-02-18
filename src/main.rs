@@ -1,9 +1,9 @@
 // src/main.rs
-mod assets;
-mod walk;
-mod result;
-mod output;
 mod args;
+mod assets;
+mod output;
+mod result;
+mod walk;
 
 use std::time::Instant;
 

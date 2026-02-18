@@ -1,6 +1,6 @@
 // src/output.rs
-use crate::result::{FileResult, Lang};
 use crate::assets::LANG_MAP;
+use crate::result::{FileResult, Lang};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -8,7 +8,7 @@ fn get_color_and_label(lang: &Lang) -> (String, String) {
     match lang {
         Lang::Identified(name) => {
             let mut color_code = "\x1b[38;5;250m".to_string(); // Default Grey
-            
+
             // Look up the language in the map to get the hex color
             if let Some(data) = LANG_MAP.get(name) {
                 if let Some(hex) = &data.color {
@@ -25,7 +25,9 @@ fn get_color_and_label(lang: &Lang) -> (String, String) {
 /// Simple Hex to ANSI 256-color converter
 fn hex_to_ansi(hex: &str) -> String {
     let hex = hex.trim_start_matches('#');
-    if hex.len() != 6 { return "\x1b[37m".to_string(); }
+    if hex.len() != 6 {
+        return "\x1b[37m".to_string();
+    }
 
     let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
     let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
@@ -54,10 +56,9 @@ pub fn print_results(results: &mut [FileResult], top_n: usize, elapsed: Duration
         return;
     }
 
-    let (t_code, t_comm, t_blnk) = results.iter().fold(
-        (0, 0, 0),
-        |a, r| (a.0 + r.code, a.1 + r.comment, a.2 + r.blank),
-    );
+    let (t_code, t_comm, t_blnk) = results.iter().fold((0, 0, 0), |a, r| {
+        (a.0 + r.code, a.1 + r.comment, a.2 + r.blank)
+    });
 
     // Own the Lang key to avoid reference-based weirdness
     let mut langs: HashMap<Lang, (usize, usize, usize, u64)> = HashMap::new();
@@ -142,12 +143,15 @@ pub fn print_results(results: &mut [FileResult], top_n: usize, elapsed: Duration
 
 pub fn print_language_composition(stats: &Vec<(Lang, (usize, usize, usize, u64))>) {
     // 1. Filter out metadata/unknowns for the percentage math
-    let filtered_stats: Vec<_> = stats.iter()
+    let filtered_stats: Vec<_> = stats
+        .iter()
         .filter(|(lang, _)| !matches!(lang, Lang::None | Lang::NonUtf8))
         .collect();
 
     let total_bytes: u64 = filtered_stats.iter().map(|(_, v)| v.3).sum();
-    if total_bytes == 0 { return; }
+    if total_bytes == 0 {
+        return;
+    }
 
     let width = 60;
     println!("\n\x1b[1m--- 📊 LANGUAGE COMPOSITION ---\x1b[0m");
@@ -159,13 +163,13 @@ pub fn print_language_composition(stats: &Vec<(Lang, (usize, usize, usize, u64))
         let (clr, _) = get_color_and_label(lang);
         let part_w = ((v.3 as f64 / total_bytes as f64) * width as f64).round() as usize;
         let actual_w = if part_w == 0 && v.3 > 0 { 1 } else { part_w };
-        
+
         current_width += actual_w;
         if current_width <= width {
             print!("{}{}", clr, "█".repeat(actual_w));
         }
     }
-    
+
     if current_width < width {
         print!("\x1b[90m{}", "█".repeat(width - current_width));
     }

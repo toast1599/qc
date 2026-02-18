@@ -73,20 +73,14 @@ Flags must be passed separately (e.g. --rs --py).",
                         root = Some(arg.clone());
                         continue;
                     } else {
-                        eprintln!(
-                            "\x1b[31;1mError:\x1b[0m Path '{}' does not exist.",
-                            arg
-                        );
+                        eprintln!("\x1b[31;1mError:\x1b[0m Path '{}' does not exist.", arg);
                         process::exit(EX_USAGE);
                     }
                 }
 
                 // Unknown option (only before --)
                 if !end_of_options && arg.starts_with('-') {
-                    eprintln!(
-                        "\x1b[31;1mError:\x1b[0m Unknown option '{}'",
-                        arg
-                    );
+                    eprintln!("\x1b[31;1mError:\x1b[0m Unknown option '{}'", arg);
                     process::exit(EX_USAGE);
                 }
             }

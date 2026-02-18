@@ -60,8 +60,11 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
 
         match first_char {
             None => {
-                if in_block { comment += 1; } 
-                else { blank += 1; }
+                if in_block {
+                    comment += 1;
+                } else {
+                    blank += 1;
+                }
             }
             Some(_) => {
                 let mut has_code = false;
@@ -78,14 +81,14 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
                         }
                     } else {
                         // We skip string logic for speed; it's rarely needed for audits
-                        if b.is_ascii_whitespace() { } 
-                        else if i + 1 < line.len() && b == b'/' && line[i+1] == b'/' {
+                        if b.is_ascii_whitespace() {
+                        } else if i + 1 < line.len() && b == b'/' && line[i + 1] == b'/' {
                             has_comment = true;
-                            break; 
+                            break;
                         } else if b == b'#' && hash_comments {
                             has_comment = true;
                             break;
-                        } else if i + 1 < line.len() && b == b'/' && line[i+1] == b'*' {
+                        } else if i + 1 < line.len() && b == b'/' && line[i + 1] == b'*' {
                             has_comment = true;
                             in_block = true;
                             i += 1;
@@ -95,8 +98,11 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
                     }
                     i += 1;
                 }
-                if has_code { code += 1; }
-                else if has_comment { comment += 1; }
+                if has_code {
+                    code += 1;
+                } else if has_comment {
+                    comment += 1;
+                }
             }
         }
     }
@@ -126,8 +132,14 @@ mod tests {
 
     #[test]
     fn test_string_markers() {
-        assert_eq!(count_lines(b"let x = \"// not a comment\";", &Lang::Rs), (1, 0, 0));
-        assert_eq!(count_lines(b"let x = \"/* not a block */\";", &Lang::Rs), (1, 0, 0));
+        assert_eq!(
+            count_lines(b"let x = \"// not a comment\";", &Lang::Rs),
+            (1, 0, 0)
+        );
+        assert_eq!(
+            count_lines(b"let x = \"/* not a block */\";", &Lang::Rs),
+            (1, 0, 0)
+        );
     }
 
     #[test]

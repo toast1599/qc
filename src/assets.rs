@@ -1,15 +1,15 @@
 // src/assets.rs
 
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 #[allow(dead_code)] // This clears the "never read" warnings
 #[derive(Debug, Deserialize, Clone)]
 
 pub struct Language {
     #[serde(rename = "type")]
-    pub lang_type: String, 
+    pub lang_type: String,
     pub color: Option<String>,
     pub extensions: Option<Vec<String>>,
     pub filenames: Option<Vec<String>>,
@@ -17,9 +17,8 @@ pub struct Language {
 
 const RAW_YML: &str = include_str!("../data/languages.yml");
 
-pub static LANG_MAP: Lazy<HashMap<String, Language>> = Lazy::new(|| {
-    serde_yml::from_str(RAW_YML).expect("languages.yml is malformed")
-});
+pub static LANG_MAP: Lazy<HashMap<String, Language>> =
+    Lazy::new(|| serde_yml::from_str(RAW_YML).expect("languages.yml is malformed"));
 
 pub static EXTENSION_LOOKUP: Lazy<HashMap<String, String>> = Lazy::new(|| {
     let mut map = HashMap::new();
