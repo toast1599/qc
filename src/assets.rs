@@ -18,7 +18,7 @@ pub struct Language {
 const RAW_YML: &str = include_str!("../data/languages.yml");
 
 pub static LANG_MAP: Lazy<HashMap<String, Language>> = Lazy::new(|| {
-    serde_yaml::from_str(RAW_YML).expect("languages.yml is malformed")
+    serde_yml::from_str(RAW_YML).expect("languages.yml is malformed")
 });
 
 pub static EXTENSION_LOOKUP: Lazy<HashMap<String, String>> = Lazy::new(|| {
