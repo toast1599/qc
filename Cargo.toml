@@ -1,5 +1,8 @@
 [package]
-name = "qc"
+name = "qc-cli"
+description = "qc is designed to give you an instant breakdown of your codebase composition. It uses Memory Mapping (Mmap) and Parallel Directory Walking to scan tens of thousands of files in milliseconds."
+repository = "https://github.com/toast1599/qc"
+readme = "README.md"
 version = "0.2.5"
 edition = "2024"
 license = "MIT"
