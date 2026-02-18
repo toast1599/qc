@@ -54,7 +54,7 @@ qc .
 `qc` is built to be faster than traditional `wc -l` loops by using byte-level scanning and avoiding unnecessary UTF-8 validation where possible.
 
 ## License
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under **GPL-3.0-or-later** - see the [LICENSE](LICENSE) file for details.
 
 ---
 Built with 🦀 by **toast1599**
