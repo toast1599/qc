@@ -1,40 +1,63 @@
+// src/walk/classify.rs
+
 use crate::assets::{EXTENSION_LOOKUP, FILENAME_LOOKUP};
 use crate::result::Lang;
 use std::path::Path;
 
 pub fn classify_file(path: &Path, content: &[u8]) -> Lang {
-    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
 
+    // 1. Exact filename match (e.g. Makefile)
     if let Some(lang_name) = FILENAME_LOOKUP.get(filename) {
-        return Lang::Identified(lang_name.to_string());
+        return Lang::Identified(lang_name.clone());
     }
 
-    // FIX: Remove format! and to_lowercase()
+    // 2. Extension-based match (case-insensitive)
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        // We now lookup using the raw extension string.
-        // We lowercase it once, but only if necessary.
-        if let Some(lang_name) = EXTENSION_LOOKUP.get(&ext.to_lowercase()) {
-            return Lang::Identified(lang_name.to_string());
+        let ext = ext.to_ascii_lowercase();
+        if let Some(lang_name) = EXTENSION_LOOKUP.get(&ext) {
+            return Lang::Identified((*lang_name).to_string());
         }
     }
 
+    // 3. Shebang-based detection
     if content.starts_with(b"#!") {
-        if let Some(lang_name) = guess_shebang(content) {
-            return Lang::Identified(lang_name);
+        if let Some(lang) = guess_shebang(content) {
+            return lang;
         }
     }
 
     Lang::None
 }
 
-fn guess_shebang(content: &[u8]) -> Option<String> {
+fn guess_shebang(content: &[u8]) -> Option<Lang> {
     let line = content.split(|&b| b == b'\n').next()?;
-    let s = String::from_utf8_lossy(line);
-    if s.contains("python") {
-        return Some("Python".into());
+    let line = String::from_utf8_lossy(line);
+
+    // Extract interpreter name safely:
+    // #!/usr/bin/env python3  -> python3
+    // #!/bin/bash             -> bash
+    let interp = line
+        .trim_start_matches("#!")
+        .trim()
+        .split_whitespace()
+        .last()?; // handles /usr/bin/env cases
+
+    let interp = Path::new(interp)
+        .file_name()
+        .and_then(|s| s.to_str())?
+        .to_ascii_lowercase();
+
+    match interp.as_str() {
+        "python" | "python3" | "python2" => {
+            Some(Lang::Identified("Python".to_string()))
+        }
+        "sh" | "bash" | "zsh" | "dash" => {
+            Some(Lang::Identified("Shell".to_string()))
+        }
+        _ => None,
     }
-    if s.contains("sh") {
-        return Some("Shell".into());
-    }
-    None
 }

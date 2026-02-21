@@ -1,27 +1,24 @@
 BINARY_NAME=qc
-# Use ?= so it can be overridden from the CLI if needed
-INSTALL_PATH ?= $(HOME)/.cargo/bin
 
-.DEFAULT_GOAL := release
+.DEFAULT_GOAL := build
 
-release:
+build:
 	cargo build --release
 
-# 'cargo install' is safer than manual copying as it handles binary stripping
 install:
-	cargo install --path .	
-	@echo "✅ Installed $(BINARY_NAME) to $(INSTALL_PATH)"
+	cargo install --path .
+	@echo "✅ Installed $(BINARY_NAME) via cargo"
 
 uninstall:
-	@rm -f $(INSTALL_PATH)/$(BINARY_NAME)
+	cargo uninstall $(BINARY_NAME)
 	@echo "🗑️  Uninstalled $(BINARY_NAME)"
 
 copy:
-	@echo "#--WAYLAND-ONLY--#"
-	@find . -name "*.rs" -not -path "./target/*" -exec sh -c 'echo "--- FILE: {} ---"; cat {}; echo "\n"' \; | wl-copy
-	@echo "✅ All .rs files bundled and copied to wl-clipboard."
+	@command -v wl-copy >/dev/null || (echo "wl-copy not found"; exit 1)
+	@find . -name "*.rs" -not -path "./target/*" -exec printf "\n### FILE: %s\n\`\`\`rust\n" {} \; -exec cat {} \; -exec printf "\n\`\`\`\n" \; | wl-copy
+	@echo "✅ All .rs files bundled and copied."
 
 clean:
 	cargo clean
 
-.PHONY: release install uninstall copy clean
+.PHONY: build install uninstall copy clean

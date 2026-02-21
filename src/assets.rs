@@ -20,14 +20,14 @@ const RAW_YML: &str = include_str!("../data/languages.yml");
 pub static LANG_MAP: Lazy<HashMap<String, Language>> =
     Lazy::new(|| serde_yml::from_str(RAW_YML).expect("languages.yml is malformed"));
 
-pub static EXTENSION_LOOKUP: Lazy<HashMap<String, String>> = Lazy::new(|| {
+pub static EXTENSION_LOOKUP: Lazy<HashMap<String, &'static str>> = Lazy::new(|| {
     let mut map = HashMap::new();
     for (name, lang) in LANG_MAP.iter() {
         if let Some(exts) = &lang.extensions {
             for ext in exts {
-                // FIX: Store extensions without the leading dot and in lowercase
                 let clean_ext = ext.trim_start_matches('.').to_lowercase();
-                map.insert(clean_ext, name.clone());
+                // Use name.as_str() because the key in LANG_MAP is 'static
+                map.insert(clean_ext, name.as_str()); 
             }
         }
     }

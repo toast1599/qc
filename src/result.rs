@@ -1,16 +1,18 @@
-// src/result.rs
+use serde::Serialize;
 use std::path::PathBuf;
 
 /// Language classification for files.
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+///
+/// `Identified` owns its name to avoid lifetime lies,
+/// pointer-identity bugs, and accidental UB-by-design.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "name")]
 pub enum Lang {
-    /// We keep these special cases
     None,
     NonUtf8,
-    /// This now covers EVERYTHING in the YAML
     Identified(String),
 }
+
 pub struct FileResult {
     pub path: PathBuf,
     pub lang: Lang,
