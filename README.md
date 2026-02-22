@@ -1,16 +1,16 @@
 # qc (Quick Count) 🚀
 
-A faster source code auditor and line counter built in Rust. 
+A very fast source code auditor and line counter built in Rust. 
 
 `qc` is designed to give you an instant breakdown of your codebase composition. It uses **Memory Mapping (Mmap)** and **Parallel Directory Walking** to scan thousands of files in milliseconds.
 
 ## Benchmarks
 In a head-to-head comparison against `tokei` on the Linux Kernel source tree, `qc` performed **~1.8x faster** over 100 runs.
 
-| Tool | Mean Time |
-| :--- | :--- |
-| **qc** | **568.9 ms** |
-| tokei | 1032 ms |
+| Tool | Mean Time | Speedup
+| :--- | :--- | :---
+| **qc** | **568.9 ms** | **1.81x**
+| tokei | 1032 ms | 1.00x
 
 ## Features
 
@@ -21,6 +21,9 @@ In a head-to-head comparison against `tokei` on the Linux Kernel source tree, `q
 * **Respectful:** Automatically respects `.gitignore` and hidden files (powered by `ignore`).
 
 ## Installation
+
+### Pre-built Binaries
+Download the latest binary for your OS from the [Releases](https://github.com/toast1599/qc/releases) page.
 
 ### From Source
 Ensure you have the Rust toolchain installed.
@@ -55,6 +58,3 @@ qc .
 
 ## License
 This project is licensed under **GPL-3.0-or-later** - see the [LICENSE](LICENSE) file for details.
-
----
-Built with 🦀 by **toast1599**
