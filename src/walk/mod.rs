@@ -29,7 +29,7 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     WalkBuilder::new(root)
         .hidden(true)
         .git_ignore(true)
-        .threads(num_cpus::get())
+        .threads(std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
         .build_parallel()
         .run(|| {
             let tx = tx.clone();
