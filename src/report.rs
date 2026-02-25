@@ -76,7 +76,25 @@ pub fn build_report(
         })
         .collect();
 
-    languages.sort_unstable_by_key(|l| std::cmp::Reverse(l.code + l.comment));
+    // Deterministic ordering:
+    // 1. Most non-blank lines
+    // 2. Language name (stable)
+    languages.sort_unstable_by(|a, b| {
+        let la = match &a.lang {
+            Lang::Identified(s) => s.as_str(),
+            Lang::NonUtf8 => "[Binary]",
+            Lang::None => "None",
+        };
+        let lb = match &b.lang {
+            Lang::Identified(s) => s.as_str(),
+            Lang::NonUtf8 => "[Binary]",
+            Lang::None => "None",
+        };
+
+        (b.code + b.comment)
+            .cmp(&(a.code + a.comment))
+            .then_with(|| la.cmp(lb))
+    });
 
     let mut files: Vec<_> = results
         .iter()
@@ -90,7 +108,15 @@ pub fn build_report(
         })
         .collect();
 
-    files.sort_unstable_by_key(|f| std::cmp::Reverse(f.code + f.comment));
+    // Deterministic ordering:
+    // 1. Most non-blank lines
+    // 2. Path (stable, human-meaningful)
+    files.sort_unstable_by(|a, b| {
+        (b.code + b.comment)
+            .cmp(&(a.code + a.comment))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+
     files.truncate(top_n);
 
     Report {

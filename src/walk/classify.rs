@@ -15,18 +15,18 @@ pub fn classify_file(path: &Path, content: &[u8]) -> Lang {
         return Lang::Identified(lang_name.clone());
     }
 
-    // 2. Extension-based match (case-insensitive)
+    // 2. Shebang-based detection (author intent beats extension)
+    if content.starts_with(b"#!") {
+        if let Some(lang) = guess_shebang(content) {
+            return lang;
+        }
+    }
+
+    // 3. Extension-based match (case-insensitive)
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let ext = ext.to_ascii_lowercase();
         if let Some(lang_name) = EXTENSION_LOOKUP.get(&ext) {
             return Lang::Identified((*lang_name).to_string());
-        }
-    }
-
-    // 3. Shebang-based detection
-    if content.starts_with(b"#!") {
-        if let Some(lang) = guess_shebang(content) {
-            return lang;
         }
     }
 
@@ -37,14 +37,19 @@ fn guess_shebang(content: &[u8]) -> Option<Lang> {
     let line = content.split(|&b| b == b'\n').next()?;
     let line = String::from_utf8_lossy(line);
 
-    // Extract interpreter name safely:
-    // #!/usr/bin/env python3  -> python3
-    // #!/bin/bash             -> bash
-    let interp = line
+    // Strip "#!" and split
+    let mut parts = line
         .trim_start_matches("#!")
         .trim()
-        .split_whitespace()
-        .last()?; // handles /usr/bin/env cases
+        .split_whitespace();
+
+    // Handle /usr/bin/env correctly:
+    // #!/usr/bin/env python -O  -> python
+    // #!/bin/bash               -> bash
+    let interp = match parts.next()? {
+        "env" => parts.next()?,
+        other => other,
+    };
 
     let interp = Path::new(interp)
         .file_name()

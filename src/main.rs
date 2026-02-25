@@ -1,4 +1,5 @@
 // src/main.rs
+
 mod args;
 mod assets;
 mod output;
@@ -28,7 +29,7 @@ fn main() {
 
     match config.format {
         OutputFormat::Text => {
-            output::text::print_results(&mut results, config.top_n, duration);
+            output::text::print_report(&report);
         }
         OutputFormat::Json => {
             let json = output::json::render_json(&report);

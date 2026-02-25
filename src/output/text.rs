@@ -1,28 +1,33 @@
 // src/output/text.rs
-use crate::assets::LANG_MAP;
-use crate::result::{FileResult, Lang};
-use std::collections::HashMap;
-use std::time::Duration;
 
-fn get_color_and_label(lang: &Lang) -> (String, String) {
+use crate::assets::LANG_MAP;
+use crate::report::{LanguageStat, Report};
+use crate::result::Lang;
+
+const WIDTH_BAR: usize = 60;
+const MAX_LANG_ROWS: usize = 15;
+const MAX_COMPOSITION_LANGS: usize = 8;
+const MAX_COMPOSITION_LABELS: usize = 5;
+
+const CLR_RESET: &str = "\x1b[0m";
+const CLR_GREY: &str = "\x1b[90m";
+const CLR_DEFAULT: &str = "\x1b[38;5;250m";
+
+fn get_color_and_label(lang: &Lang) -> (String, &str) {
     match lang {
         Lang::Identified(name) => {
-            let mut color_code = "\x1b[38;5;250m".to_string(); // Default grey
-
             if let Some(data) = LANG_MAP.get(name) {
                 if let Some(hex) = &data.color {
-                    color_code = hex_to_ansi(hex);
+                    return (hex_to_ansi(hex), name);
                 }
             }
-
-            (color_code, name.clone())
+            (CLR_DEFAULT.to_string(), name)
         }
-        Lang::None => ("\x1b[90m".to_string(), "None".to_string()),
-        Lang::NonUtf8 => ("\x1b[90m".to_string(), "[Binary]".to_string()),
+        Lang::None => (CLR_GREY.to_string(), "None"),
+        Lang::NonUtf8 => (CLR_GREY.to_string(), "[Binary]"),
     }
 }
 
-/// Hex to ANSI truecolor converter
 fn hex_to_ansi(hex: &str) -> String {
     let hex = hex.trim_start_matches('#');
     if hex.len() != 6 {
@@ -37,53 +42,46 @@ fn hex_to_ansi(hex: &str) -> String {
 }
 
 pub fn format_size(bytes: u64) -> String {
-    let (v, u) = if bytes >= 1 << 30 {
-        (bytes as f64 / (1 << 30) as f64, "GB")
-    } else if bytes >= 1 << 20 {
-        (bytes as f64 / (1 << 20) as f64, "MB")
-    } else if bytes >= 1 << 10 {
-        (bytes as f64 / (1 << 10) as f64, "KB")
-    } else {
-        (bytes as f64, "B")
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    const GB: f64 = MB * 1024.0;
+
+    let (v, u) = match bytes as f64 {
+        b if b >= GB => (b / GB, "GB"),
+        b if b >= MB => (b / MB, "MB"),
+        b if b >= KB => (b / KB, "KB"),
+        b => (b, "B"),
     };
 
     format!("{:.2} {}", v, u)
 }
 
-pub fn print_results(results: &mut [FileResult], top_n: usize, elapsed: Duration) {
-    if results.is_empty() {
-        return;
-    }
-
-    let (t_code, t_comm, t_blnk) = results.iter().fold((0, 0, 0), |a, r| {
-        (a.0 + r.code, a.1 + r.comment, a.2 + r.blank)
-    });
-
-    let mut langs: HashMap<Lang, (usize, usize, usize, u64)> = HashMap::new();
-    for r in results.iter() {
-        let entry = langs.entry(r.lang.clone()).or_insert((0, 0, 0, 0));
-        entry.0 += r.code;
-        entry.1 += r.comment;
-        entry.2 += r.blank;
-        entry.3 += r.bytes;
-    }
-
-    let mut stats: Vec<_> = langs.into_iter().collect();
-    stats.sort_unstable_by_key(|(_, v)| std::cmp::Reverse(v.0 + v.1));
-
-    let (blu, cyn, bld, rst) = ("\x1b[34;1m", "\x1b[36;1m", "\x1b[1m", "\x1b[0m");
-
-    println!("\n{}--- 📊 AUDIT RESULTS ---{}", blu, rst);
-    println!(
-        "Total Lines: {} (Code: {}, Comm*: {}, Blank: {})\nElapsed: {:?}",
-        t_code + t_comm + t_blnk,
-        t_code,
-        t_comm,
-        t_blnk,
-        elapsed
+pub fn print_report(report: &Report) {
+    print_summary(report);
+    print_language_breakdown(report);
+    print_top_files(report);
+    print_heatmap(
+        report.totals.code,
+        report.totals.comment,
+        report.totals.blank,
     );
+    print_language_composition(&report.languages);
+}
 
-    println!("{}--- 📚 LANGUAGE BREAKDOWN ---{}", cyn, rst);
+fn print_summary(report: &Report) {
+    println!("\n\x1b[34;1m--- 📊 AUDIT RESULTS ---{}\n", CLR_RESET);
+    println!(
+        "Total Lines: {} (Code: {}, Comm*: {}, Blank: {})\nElapsed: {} ms",
+        report.totals.code + report.totals.comment + report.totals.blank,
+        report.totals.code,
+        report.totals.comment,
+        report.totals.blank,
+        report.elapsed_ms
+    );
+}
+
+fn print_language_breakdown(report: &Report) {
+    println!("\n\x1b[36;1m--- 📚 LANGUAGE BREAKDOWN ---{}\n", CLR_RESET);
     println!(
         "{:<12} | {:>10} | {:>8} | {:>8} | {:>10}\n{}",
         "LANG",
@@ -94,116 +92,119 @@ pub fn print_results(results: &mut [FileResult], top_n: usize, elapsed: Duration
         "-".repeat(60)
     );
 
-    for (lang, (co, cm, bl, by)) in stats.iter().take(15) {
-        let (clr, lbl) = get_color_and_label(lang);
+    for lang in report.languages.iter().take(MAX_LANG_ROWS) {
+        let (clr, lbl) = get_color_and_label(&lang.lang);
         println!(
             "{}{:<12}{} | {:>10} | {:>8} | {:>8} | {:>10}",
             clr,
             lbl,
-            rst,
-            co,
-            cm,
-            bl,
-            format_size(*by)
+            CLR_RESET,
+            lang.code,
+            lang.comment,
+            lang.blank,
+            format_size(lang.bytes)
         );
     }
+}
 
-    results.sort_unstable_by_key(|r| std::cmp::Reverse(r.code + r.comment));
-
+fn print_top_files(report: &Report) {
     println!(
-        "\n{}--- 🏆 TOP {} LARGEST FILES ---{}\n{}{:>12} | {:>10} | PATH{}\n{}",
-        blu,
-        top_n,
-        rst,
-        bld,
+        "\n\x1b[34;1m--- 🏆 TOP {} LARGEST FILES ---{}\n\x1b[1m{:>12} | {:>10} | PATH{}\n{}",
+        report.files.len(),
+        CLR_RESET,
         "LINES",
         "SIZE",
-        rst,
+        CLR_RESET,
         "-".repeat(80)
     );
 
-    for r in results.iter().take(top_n) {
-        let (clr, _) = get_color_and_label(&r.lang);
+    for f in &report.files {
+        let (clr, _) = get_color_and_label(&f.lang);
         println!(
             "{:>12} | {:>10} | {}{}{}",
-            r.code + r.comment,
-            format_size(r.bytes),
+            f.code + f.comment,
+            format_size(f.bytes),
             clr,
-            r.path.display(),
-            rst
+            f.path,
+            CLR_RESET
         );
     }
-
-    print_heatmap(t_code, t_comm, t_blnk);
-    print_language_composition(&stats);
 }
 
-pub fn print_language_composition(stats: &[(Lang, (usize, usize, usize, u64))]) {
+pub fn print_language_composition(stats: &[LanguageStat]) {
     let filtered: Vec<_> = stats
         .iter()
-        .filter(|(lang, _)| !matches!(lang, Lang::None | Lang::NonUtf8))
+        .filter(|l| !matches!(l.lang, Lang::None | Lang::NonUtf8))
         .collect();
 
-    let total_bytes: u64 = filtered.iter().map(|(_, v)| v.3).sum();
+    let total_bytes: u64 = filtered.iter().map(|l| l.bytes).sum();
     if total_bytes == 0 {
         return;
     }
 
-    let width = 60;
-    println!("\n\x1b[1m--- 📊 LANGUAGE COMPOSITION ---\x1b[0m");
-    print!("  [");
+    println!("\n\x1b[1m--- 📊 LANGUAGE COMPOSITION ---{}\n  [", CLR_RESET);
 
-    let mut used = 0;
-    for (lang, v) in filtered.iter().take(8) {
-        let (clr, _) = get_color_and_label(lang);
-        let w = ((v.3 as f64 / total_bytes as f64) * width as f64).round() as usize;
-        let w = w.max(1);
+    let mut remaining = WIDTH_BAR;
 
-        if used + w <= width {
-            print!("{}{}", clr, "█".repeat(w));
-            used += w;
+    for (i, lang) in filtered.iter().take(MAX_COMPOSITION_LANGS).enumerate() {
+        let (clr, _) = get_color_and_label(&lang.lang);
+        let w = if i + 1 == MAX_COMPOSITION_LANGS || i + 1 == filtered.len() {
+            remaining
+        } else {
+            ((lang.bytes as f64 / total_bytes as f64) * WIDTH_BAR as f64).round() as usize
+        };
+
+        let w = w.min(remaining);
+        remaining -= w;
+
+        print!("{}{}", clr, "█".repeat(w));
+        if remaining == 0 {
+            break;
         }
     }
 
-    if used < width {
-        print!("\x1b[90m{}", "█".repeat(width - used));
+    if remaining > 0 {
+        print!("{}{}", CLR_GREY, "█".repeat(remaining));
     }
-    println!("\x1b[0m]");
 
+    println!("{}]", CLR_RESET);
     print!("  ");
-    for (lang, v) in filtered.iter().take(5) {
-        let (clr, lbl) = get_color_and_label(lang);
-        let pct = (v.3 as f64 / total_bytes as f64) * 100.0;
+
+    for lang in filtered.iter().take(MAX_COMPOSITION_LABELS) {
+        let (clr, lbl) = get_color_and_label(&lang.lang);
+        let pct = (lang.bytes as f64 / total_bytes as f64) * 100.0;
         print!("{}{} ({:.1}%)  ", clr, lbl, pct);
     }
-    println!("\x1b[0m\n");
+
+    println!("{}\n", CLR_RESET);
 }
 
-fn print_heatmap(code: usize, comm: usize, blnk: usize) {
-    let total = code + comm + blnk;
+fn print_heatmap(code: usize, comm: usize, blank: usize) {
+    let total = code + comm + blank;
     if total == 0 {
         println!("No data collected.");
         return;
     }
 
-    let total = total as f64;
-    let width: usize = 60;
-
-    let c_w = ((code as f64 / total) * width as f64).floor() as usize;
-    let m_w = ((comm as f64 / total) * width as f64).floor() as usize;
-    let b_w = width.saturating_sub(c_w + m_w);
+    let total_f = total as f64;
+    let c_w = ((code as f64 / total_f) * WIDTH_BAR as f64).floor() as usize;
+    let m_w = ((comm as f64 / total_f) * WIDTH_BAR as f64).floor() as usize;
+    let b_w = WIDTH_BAR.saturating_sub(c_w + m_w);
 
     println!(
-        "\n\x1b[35;1m--- 📊 COMPOSITION --- \x1b[0m\n  [\x1b[32m{}\x1b[33m{}\x1b[37m{}\x1b[0m]",
+        "\n\x1b[35;1m--- 📊 COMPOSITION ---{}\n  [\x1b[32m{}\x1b[33m{}\x1b[37m{}\x1b[0m]",
+        CLR_RESET,
         "█".repeat(c_w),
         "█".repeat(m_w),
         "█".repeat(b_w)
     );
 
     println!(
-        "  \x1b[32m■\x1b[0m Code ({:.1}%)  \x1b[33m■\x1b[0m Comm* ({:.1}%)  \x1b[37m■\x1b[0m Blank ({:.1}%)",
-        (code as f64 / total) * 100.0,
-        (comm as f64 / total) * 100.0,
-        (blnk as f64 / total) * 100.0
+        "  \x1b[32m■\x1b[0m Code ({:.1}%)  \
+         \x1b[33m■\x1b[0m Comm* ({:.1}%)  \
+         \x1b[37m■\x1b[0m Blank ({:.1}%)",
+        (code as f64 / total_f) * 100.0,
+        (comm as f64 / total_f) * 100.0,
+        (blank as f64 / total_f) * 100.0
     );
 }

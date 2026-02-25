@@ -1,7 +1,6 @@
 // src/walk/mod.rs
 
-use crate::result::FileResult;
-use crate::result::Lang;
+use crate::result::{FileResult, Lang};
 use crossbeam_channel;
 use ignore::{WalkBuilder, WalkState};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,7 +16,12 @@ use classify::classify_file;
 use io::map_file;
 
 pub fn parallel_scan(root: &str) -> Vec<FileResult> {
-    let (tx, rx) = crossbeam_channel::unbounded();
+    // Bounded channel to avoid unbounded memory growth
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+
+    let (tx, rx) = crossbeam_channel::bounded(threads * 2);
 
     let pb = ProgressBar::new_spinner().with_style(
         ProgressStyle::default_spinner()
@@ -29,12 +33,12 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
     WalkBuilder::new(root)
         .hidden(true)
         .git_ignore(true)
-        .threads(std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
+        .threads(threads)
         .build_parallel()
         .run(|| {
             let tx = tx.clone();
             let pb = pb.clone();
-            let mut local_count = 0;
+            let mut local_count = 0usize;
 
             Box::new(move |entry| {
                 let Ok(entry) = entry else {
@@ -45,12 +49,11 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
                     return WalkState::Continue;
                 }
 
-                // Optimization: Get metadata from entry to avoid redundant syscall
                 let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
 
                 local_count += 1;
                 if local_count >= 500 {
-                    pb.inc(500);
+                    pb.inc(local_count as u64);
                     local_count = 0;
                 }
 
@@ -61,7 +64,9 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
             })
         });
 
+    // Flush any remaining per-thread progress
     pb.finish_with_message("Done");
+
     drop(tx);
     rx.into_iter().collect()
 }
@@ -78,7 +83,6 @@ fn process_file(path: &Path, bytes: u64) -> FileResult {
         };
     }
 
-    // Hybrid I/O logic
     if bytes > 16 * 1024 {
         if let Some(mmap) = map_file(path) {
             return analyze_data(path, &mmap, bytes);
@@ -99,6 +103,7 @@ fn analyze_data(path: &Path, data: &[u8], bytes: u64) -> FileResult {
 
     let lang = classify_file(path, data);
     let (code, comment, blank) = count_lines(data, &lang);
+
     FileResult {
         path: path.to_path_buf(),
         lang,
@@ -123,7 +128,7 @@ fn binary_result(path: &Path, bytes: u64) -> FileResult {
 fn error_result(path: &Path, bytes: u64) -> FileResult {
     FileResult {
         path: path.to_path_buf(),
-        lang: Lang::None,
+        lang: Lang::None, // unreadable stays "unknown"
         code: 0,
         comment: 0,
         blank: 0,
