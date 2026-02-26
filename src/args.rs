@@ -1,4 +1,5 @@
 // src/args.rs
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -6,6 +7,18 @@ use std::process;
 use crate::result::Lang;
 
 const EX_USAGE: i32 = 67; // yes, really
+
+// ---- Canonical language names ----
+// These MUST match classifier output.
+// Centralizing them removes accidental string drift.
+const LANG_RUST: &str = "Rust";
+const LANG_PYTHON: &str = "Python";
+const LANG_C: &str = "C";
+const LANG_SHELL: &str = "Shell";
+const LANG_YAML: &str = "YAML";
+const LANG_MARKDOWN: &str = "Markdown";
+const LANG_JS: &str = "JavaScript";
+const LANG_JAVA: &str = "Java";
 
 #[derive(Debug)]
 pub struct Config {
@@ -62,20 +75,13 @@ pub fn parse_args() -> Config {
                 _ => {}
             }
 
+            // Language flags
             if let Some(lang) = flag_to_lang(arg) {
                 langs.insert(lang);
                 continue;
             }
 
-            if arg.contains(',') {
-                eprintln!(
-                    "\x1b[31;1mError:\x1b[0m Invalid option '{}'. \
-Flags must be passed separately (e.g. --rs --py).",
-                    arg
-                );
-                process::exit(EX_USAGE);
-            }
-
+            // Numeric shorthand: -5
             if arg.starts_with('-')
                 && arg.len() > 1
                 && arg[1..].chars().all(|c| c.is_ascii_digit())
@@ -96,6 +102,7 @@ Flags must be passed separately (e.g. --rs --py).",
             }
         }
 
+        // Path handling (paths may contain commas, dashes, etc.)
         if root.is_none() {
             if Path::new(arg).exists() {
                 root = Some(arg.clone());
@@ -133,20 +140,22 @@ pub enum OutputFormat {
     Json,
 }
 
-/// Maps CLI flags to Lang variants.
-/// NOTE: Extension-based, not semantic parsing.
+/// Maps CLI flags to canonical language identifiers.
+/// These identifiers MUST match classifier output exactly.
 fn flag_to_lang(arg: &str) -> Option<Lang> {
-    match arg {
-        "--rs" | "--rust" => Some(Lang::Identified("Rust".to_string())),
-        "--py" | "--python" => Some(Lang::Identified("Python".to_string())),
-        "--c" => Some(Lang::Identified("C".to_string())),
-        "--sh" => Some(Lang::Identified("Shell".to_string())),
-        "--yaml" | "--yml" => Some(Lang::Identified("YAML".to_string())),
-        "--md" | "--doc" => Some(Lang::Identified("Markdown".to_string())),
-        "--js" | "--javascript" => Some(Lang::Identified("JavaScript".to_string())),
-        "--java" => Some(Lang::Identified("Java".to_string())),
-        _ => None,
-    }
+    let name = match arg {
+        "--rs" | "--rust" => LANG_RUST,
+        "--py" | "--python" => LANG_PYTHON,
+        "--c" => LANG_C,
+        "--sh" => LANG_SHELL,
+        "--yaml" | "--yml" => LANG_YAML,
+        "--md" | "--doc" => LANG_MARKDOWN,
+        "--js" | "--javascript" => LANG_JS,
+        "--java" => LANG_JAVA,
+        _ => return None,
+    };
+
+    Some(Lang::Identified(name.to_string()))
 }
 
 fn print_help() {

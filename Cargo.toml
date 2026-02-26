@@ -1,6 +1,6 @@
 [package]
 name = "qc-cli"
-version = "0.5.7"
+version = "0.5.8"
 edition = "2024"
 description = "qc is designed to give you an instant breakdown of your codebase composition using Mmap and Parallel Directory Walking."
 repository = "https://github.com/toast1599/qc"
