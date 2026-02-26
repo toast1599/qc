@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "qc-cli"
-version = "0.5.7"
+version = "0.5.8"
 dependencies = [
  "bytecount",
  "crossbeam-channel",
