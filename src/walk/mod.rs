@@ -21,7 +21,7 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
         .map(|n| n.get())
         .unwrap_or(1);
 
-    let (tx, rx) = crossbeam_channel::bounded(threads * 2);
+    let (tx, rx) = crossbeam_channel::unbounded();
 
     let pb = ProgressBar::new_spinner().with_style(
         ProgressStyle::default_spinner()
