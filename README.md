@@ -4,6 +4,10 @@ A high-performance source code auditor and line counter built in modern Rust.
 
 `qc` is designed to provide an instant, high-fidelity breakdown of codebase composition. By leveraging **Memory Mapping (Mmap)** and **Parallel Directory Walking**, it can scan tens of thousands of files in milliseconds.
 
+## Example Output
+
+![qc demo](data/demo.gif)
+
 ## ⚡ Benchmarks
 In head-to-head comparisons against `tokei` on the Linux Kernel source tree, `qc` performed **~1.8x faster** over 100 runs.
 
