@@ -13,10 +13,10 @@ pub fn is_binary(data: &[u8]) -> bool {
     }
 
     // Check for UTF-16 BOMs (UTF-16 LE/BE)
-    if data.len() >= 2 {
-        if (data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF) {
-            return false;
-        }
+    if data.len() >= 2
+        && ((data[0] == 0xFF && data[1] == 0xFE) || (data[0] == 0xFE && data[1] == 0xFF))
+    {
+        return false;
     }
 
     let nul_count = data.iter().filter(|&&b| b == 0).count();
@@ -76,12 +76,14 @@ fn is_hash_comment_lang(lang: &Lang) -> bool {
 /// - `code` counts lines that contain any code token (including lines that also contain a comment).
 /// - `comment` counts lines that contain any comment token (including lines that also contain code).
 /// - `blank` counts empty/whitespace-only lines.
-/// This means a "mixed" line (code + comment) will increment both `code` and `comment`.
+/// - `physical_lines` counts each physical line once.
+///   This means a "mixed" line (code + comment) increments `physical_lines` once,
+///   while also incrementing both `code` and `comment`.
 ///
 /// Note: this is intentionally heuristic and not a full parser.
-pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
+pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize, usize) {
     if data.is_empty() {
-        return (0, 0, 0);
+        return (0, 0, 0, 0);
     }
 
     // Trim a single trailing newline or carriage return if present (preserve internal newlines)
@@ -91,6 +93,7 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
     let mut code = 0usize;
     let mut comment = 0usize;
     let mut blank = 0usize;
+    let mut physical_lines = 0usize;
 
     let mut in_block = false;
     let mut in_string = false;
@@ -99,6 +102,8 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
     let hash_comments = is_hash_comment_lang(lang);
 
     for line in data.split(|&b| b == b'\n') {
+        physical_lines += 1;
+
         // Position of first non-whitespace byte
         let first_non_ws = line.iter().position(|&b| !b.is_ascii_whitespace());
 
@@ -180,7 +185,7 @@ pub fn count_lines(data: &[u8], lang: &Lang) -> (usize, usize, usize) {
         }
     }
 
-    (code, comment, blank)
+    (code, comment, blank, physical_lines)
 }
 
 #[cfg(test)]
@@ -197,31 +202,31 @@ mod tests {
 
     #[test]
     fn test_empty_file() {
-        assert_eq!(count_lines(b"", &rs()), (0, 0, 0));
+        assert_eq!(count_lines(b"", &rs()), (0, 0, 0, 0));
     }
 
     #[test]
     fn test_trailing_newline() {
-        assert_eq!(count_lines(b"line1\n", &rs()), (1, 0, 0));
-        assert_eq!(count_lines(b"line1\n\n", &rs()), (1, 0, 1));
+        assert_eq!(count_lines(b"line1\n", &rs()), (1, 0, 0, 1));
+        assert_eq!(count_lines(b"line1\n\n", &rs()), (1, 0, 1, 2));
     }
 
     #[test]
     fn test_inline_comments() {
-        // Mixed line now counts as both code and comment.
-        assert_eq!(count_lines(b"code(); // comment", &rs()), (1, 1, 0));
-        assert_eq!(count_lines(b"// full comment", &rs()), (0, 1, 0));
+        // Mixed line counts in both categories, but one physical line.
+        assert_eq!(count_lines(b"code(); // comment", &rs()), (1, 1, 0, 1));
+        assert_eq!(count_lines(b"// full comment", &rs()), (0, 1, 0, 1));
     }
 
     #[test]
     fn test_string_markers() {
         assert_eq!(
             count_lines(b"let x = \"// not a comment\";", &rs()),
-            (1, 0, 0)
+            (1, 0, 0, 1)
         );
         assert_eq!(
             count_lines(b"let x = \"/* not a block */\";", &rs()),
-            (1, 0, 0)
+            (1, 0, 0, 1)
         );
     }
 
@@ -229,20 +234,20 @@ mod tests {
     fn test_multiline_string() {
         let data = b"let x = \"\n continuation\n \";";
         // Heuristic keeps these lines counted as code
-        assert_eq!(count_lines(data, &rs()), (3, 0, 0));
+        assert_eq!(count_lines(data, &rs()), (3, 0, 0, 3));
     }
 
     #[test]
     fn test_hash_logic() {
         // '#' in Rust-like file considered code (attribute), but in Python it's comment
-        assert_eq!(count_lines(b"#attribute", &rs()), (1, 0, 0));
-        assert_eq!(count_lines(b"# comment", &py()), (0, 1, 0));
+        assert_eq!(count_lines(b"#attribute", &rs()), (1, 0, 0, 1));
+        assert_eq!(count_lines(b"# comment", &py()), (0, 1, 0, 1));
     }
 
     #[test]
     fn test_block_comments() {
         let data = b"/*\n multi\n line\n */";
-        assert_eq!(count_lines(data, &rs()), (0, 4, 0));
+        assert_eq!(count_lines(data, &rs()), (0, 4, 0, 4));
     }
 
     #[test]
@@ -257,14 +262,14 @@ mod tests {
     fn test_block_comment_in_string() {
         assert_eq!(
             count_lines(b"let x = \"/* not a block */\";", &rs()),
-            (1, 0, 0)
+            (1, 0, 0, 1)
         );
         assert_eq!(
             count_lines(
                 b"let x = \"/* not a block */\";\nlet y = 1;",
                 &rs()
             ),
-            (2, 0, 0)
+            (2, 0, 0, 2)
         );
     }
 }

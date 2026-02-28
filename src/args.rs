@@ -100,6 +100,14 @@ pub fn parse_args() -> Config {
                     }
                 }
             }
+
+            if arg.starts_with('-') {
+                eprintln!(
+                    "\x1b[31;1mError:\x1b[0m Unknown option '{}'",
+                    arg
+                );
+                process::exit(EX_USAGE);
+            }
         }
 
         // Path handling (paths may contain commas, dashes, etc.)
@@ -114,14 +122,6 @@ pub fn parse_args() -> Config {
                 );
                 process::exit(EX_USAGE);
             }
-        }
-
-        if !end_of_options && arg.starts_with('-') {
-            eprintln!(
-                "\x1b[31;1mError:\x1b[0m Unknown option '{}'",
-                arg
-            );
-            process::exit(EX_USAGE);
         }
     }
 

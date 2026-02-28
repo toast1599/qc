@@ -1,7 +1,6 @@
 // src/walk/mod.rs
 
 use crate::result::{FileResult, Lang};
-use crossbeam_channel;
 use ignore::{WalkBuilder, WalkState};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
@@ -45,7 +44,7 @@ pub fn parallel_scan(root: &str) -> Vec<FileResult> {
                     return WalkState::Continue;
                 };
 
-                if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if !entry.file_type().is_some_and(|ft| ft.is_file()) {
                     return WalkState::Continue;
                 }
 
@@ -79,14 +78,13 @@ fn process_file(path: &Path, bytes: u64) -> FileResult {
             code: 0,
             comment: 0,
             blank: 0,
+            physical_lines: 0,
             bytes: 0,
         };
     }
 
-    if bytes > 16 * 1024 {
-        if let Some(mmap) = map_file(path) {
-            return analyze_data(path, &mmap, bytes);
-        }
+    if bytes > 16 * 1024 && let Some(mmap) = map_file(path) {
+        return analyze_data(path, &mmap, bytes);
     }
 
     if let Ok(buf) = fs::read(path) {
@@ -102,7 +100,7 @@ fn analyze_data(path: &Path, data: &[u8], bytes: u64) -> FileResult {
     }
 
     let lang = classify_file(path, data);
-    let (code, comment, blank) = count_lines(data, &lang);
+    let (code, comment, blank, physical_lines) = count_lines(data, &lang);
 
     FileResult {
         path: path.to_path_buf(),
@@ -110,6 +108,7 @@ fn analyze_data(path: &Path, data: &[u8], bytes: u64) -> FileResult {
         code,
         comment,
         blank,
+        physical_lines,
         bytes,
     }
 }
@@ -121,6 +120,7 @@ fn binary_result(path: &Path, bytes: u64) -> FileResult {
         code: 0,
         comment: 0,
         blank: 0,
+        physical_lines: 0,
         bytes,
     }
 }
@@ -132,6 +132,7 @@ fn error_result(path: &Path, bytes: u64) -> FileResult {
         code: 0,
         comment: 0,
         blank: 0,
+        physical_lines: 0,
         bytes,
     }
 }

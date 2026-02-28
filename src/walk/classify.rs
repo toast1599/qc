@@ -16,10 +16,8 @@ pub fn classify_file(path: &Path, content: &[u8]) -> Lang {
     }
 
     // 2. Shebang-based detection (author intent beats extension)
-    if content.starts_with(b"#!") {
-        if let Some(lang) = guess_shebang(content) {
-            return lang;
-        }
+    if content.starts_with(b"#!") && let Some(lang) = guess_shebang(content) {
+        return lang;
     }
 
     // 3. Extension-based match (case-insensitive)
@@ -38,23 +36,17 @@ fn guess_shebang(content: &[u8]) -> Option<Lang> {
     let line = String::from_utf8_lossy(line);
 
     // Strip "#!" and split
-    let mut parts = line
-        .trim_start_matches("#!")
-        .trim()
-        .split_whitespace();
+    let mut parts = line.trim_start_matches("#!").split_whitespace();
 
     // Handle /usr/bin/env correctly:
     // #!/usr/bin/env python -O  -> python
     // #!/bin/bash               -> bash
-    let interp = match parts.next()? {
-        "env" => parts.next()?,
-        other => other,
+    let interp = normalize_interp(parts.next()?)?;
+    let interp = if interp == "env" {
+        normalize_interp(parts.next()?)?
+    } else {
+        interp
     };
-
-    let interp = Path::new(interp)
-        .file_name()
-        .and_then(|s| s.to_str())?
-        .to_ascii_lowercase();
 
     match interp.as_str() {
         "python" | "python3" | "python2" => {
@@ -64,5 +56,35 @@ fn guess_shebang(content: &[u8]) -> Option<Lang> {
             Some(Lang::Identified("Shell".to_string()))
         }
         _ => None,
+    }
+}
+
+fn normalize_interp(token: &str) -> Option<String> {
+    Path::new(token)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shebang_env_python_is_detected() {
+        let detected = guess_shebang(b"#!/usr/bin/env python -O\nprint(1)\n");
+        assert_eq!(detected, Some(Lang::Identified("Python".to_string())));
+    }
+
+    #[test]
+    fn shebang_env_bash_is_detected() {
+        let detected = guess_shebang(b"#!/usr/bin/env bash\nset -e\n");
+        assert_eq!(detected, Some(Lang::Identified("Shell".to_string())));
+    }
+
+    #[test]
+    fn shebang_direct_path_is_detected() {
+        let detected = guess_shebang(b"#!/bin/bash\necho hi\n");
+        assert_eq!(detected, Some(Lang::Identified("Shell".to_string())));
     }
 }

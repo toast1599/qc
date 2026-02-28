@@ -19,5 +19,6 @@ pub struct FileResult {
     pub code: usize,
     pub comment: usize,
     pub blank: usize,
+    pub physical_lines: usize,
     pub bytes: u64,
 }

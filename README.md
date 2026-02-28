@@ -16,11 +16,19 @@ In head-to-head comparisons against `tokei` on the Linux Kernel source tree, `qc
 
 * **Modern Rust Core:** Built on the **Rust 2024 Edition** for maximum safety and performance.
 * **Hybrid I/O Engine:** Automatically switches between standard `fs::read` and `Mmap` based on file size to optimize throughput.
-* **Deep Heuristics:** Identifies files via extensions, filenames, and **shebang detection** (e.g., `#!/bin/bash`).
-* **Line Composition:** Accurately distinguishes between Code, Comments, and Blank lines using a fast, byte-level state machine.
+* **Deep Heuristics:** Identifies files via extensions, filenames, and **shebang detection** (e.g., `#!/bin/bash`, `#!/usr/bin/env python`).
+* **Line Composition:** Reports physical lines and category hits (Code, Comments, Blank) using a fast, byte-level state machine.
 * **Terminal Visuals:** Includes a color-coded language composition bar and a code/comment heatmap.
 * **Rich Output:** Supports human-readable text output or machine-readable **JSON** for CI/CD integration.
 * **Respectful:** Powered by the `ignore` crate to automatically honor `.gitignore`, `.ignore`, and hidden file rules.
+
+### Counting Semantics
+`qc` reports:
+
+* `physical_lines` as the one-true line count (each physical line once).
+* `code`, `comment`, and `blank` as category hits.
+
+A mixed line like `let x = 1; // note` counts as one physical line and increments both `code` and `comment`.
 
 ## 🛠 Installation
 
@@ -53,6 +61,14 @@ qc .
 * `qc --json` — Output results as a JSON object.
 * `qc --json-out <path>` — Save JSON results directly to a file.
 * `qc --rs --py` — Filter results to specific languages (e.g., Rust and Python).
+* `qc -- [path-starting-with-dash]` — Treat following tokens as paths even if they begin with `-`.
+
+Unknown flags return an explicit unknown-option error.
+
+### Output Notes
+* Text summary reports `Physical Lines` and category hits.
+* JSON output includes `physical_lines` in `totals`, `languages`, and `files`.
+* `Top N Largest Files` is ranked by file size in bytes (stable path tiebreaker).
 
 ## 📊 Performance Philosophy
 Unlike traditional counters that rely on heavy AST parsing, `qc` uses a **byte-level scanning heuristic**. This avoids the overhead of full UTF-8 validation while maintaining high accuracy for line-type classification, making it ideal for massive monorepos where speed is the primary constraint.

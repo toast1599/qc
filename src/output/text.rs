@@ -16,10 +16,10 @@ const CLR_DEFAULT: &str = "\x1b[38;5;250m";
 fn get_color_and_label(lang: &Lang) -> (String, &str) {
     match lang {
         Lang::Identified(name) => {
-            if let Some(data) = LANG_MAP.get(name) {
-                if let Some(hex) = &data.color {
-                    return (hex_to_ansi(hex), name);
-                }
+            if let Some(data) = LANG_MAP.get(name)
+                && let Some(hex) = &data.color
+            {
+                return (hex_to_ansi(hex), name);
             }
             (CLR_DEFAULT.to_string(), name)
         }
@@ -71,8 +71,8 @@ pub fn print_report(report: &Report) {
 fn print_summary(report: &Report) {
     println!("\n\x1b[34;1m--- 📊 AUDIT RESULTS ---{}\n", CLR_RESET);
     println!(
-        "Total Lines: {} (Code: {}, Comm*: {}, Blank: {})\nElapsed: {} ms",
-        report.totals.code + report.totals.comment + report.totals.blank,
+        "Physical Lines: {}\nCategory Hits: Code: {}, Comm*: {}, Blank: {}\nElapsed: {} ms",
+        report.totals.physical_lines,
         report.totals.code,
         report.totals.comment,
         report.totals.blank,
