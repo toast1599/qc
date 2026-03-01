@@ -22,6 +22,21 @@ C:
     - ".c"
     - ".h"
 
+C++:
+  type: programming
+  color: "#f34b7d"
+  extensions:
+    - ".cc"
+    - ".cpp"
+    - ".cxx"
+    - ".c++"
+    - ".hh"
+    - ".hpp"
+    - ".hxx"
+    - ".h++"
+  filenames:
+    - "CMakeLists.txt"
+
 Makefile:
   type: programming
   color: "#427819"

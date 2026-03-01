@@ -69,6 +69,7 @@ fn normalize_interp(token: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn shebang_env_python_is_detected() {
@@ -86,5 +87,11 @@ mod tests {
     fn shebang_direct_path_is_detected() {
         let detected = guess_shebang(b"#!/bin/bash\necho hi\n");
         assert_eq!(detected, Some(Lang::Identified("Shell".to_string())));
+    }
+
+    #[test]
+    fn cpp_extension_is_detected() {
+        let detected = classify_file(Path::new("main.cpp"), b"int main() { return 0; }\n");
+        assert_eq!(detected, Lang::Identified("C++".to_string()));
     }
 }

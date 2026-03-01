@@ -14,6 +14,7 @@ const EX_USAGE: i32 = 67; // yes, really
 const LANG_RUST: &str = "Rust";
 const LANG_PYTHON: &str = "Python";
 const LANG_C: &str = "C";
+const LANG_CPP: &str = "C++";
 const LANG_SHELL: &str = "Shell";
 const LANG_YAML: &str = "YAML";
 const LANG_MARKDOWN: &str = "Markdown";
@@ -72,7 +73,28 @@ pub fn parse_args() -> Config {
                     json_out = Some(PathBuf::from(path));
                     continue;
                 }
+                "--lang" => {
+                    let value = iter.next().unwrap_or_else(|| {
+                        eprintln!(
+                            "\x1b[31;1mError:\x1b[0m --lang requires a comma-separated list"
+                        );
+                        process::exit(EX_USAGE);
+                    });
+                    extend_langs_from_csv(value, &mut langs);
+                    continue;
+                }
                 _ => {}
+            }
+
+            if let Some(value) = arg.strip_prefix("--lang=") {
+                if value.trim().is_empty() {
+                    eprintln!(
+                        "\x1b[31;1mError:\x1b[0m --lang requires a comma-separated list"
+                    );
+                    process::exit(EX_USAGE);
+                }
+                extend_langs_from_csv(value, &mut langs);
+                continue;
             }
 
             // Language flags
@@ -169,6 +191,8 @@ fn print_help() {
     println!("  -<number>            Limit results to top N files (e.g. -5)");
     println!("  --json               Output results as JSON");
     println!("  --json-out <path>    Write JSON output to file");
+    println!("  --lang <list>        Filter by comma list (e.g. rs,py,js)");
+    println!("  --lang=<list>        Same as above");
 
     println!("\nLanguage filters (may be combined):");
     println!("  --rs, --rust");
@@ -181,4 +205,60 @@ fn print_help() {
     println!("  --java");
 
     println!("\nUse `--` to separate options from paths (e.g. qc -- Makefile)");
+}
+
+fn extend_langs_from_csv(csv: &str, langs: &mut HashSet<Lang>) {
+    for raw in csv.split(',') {
+        let token = raw.trim();
+        if token.is_empty() {
+            eprintln!(
+                "\x1b[31;1mError:\x1b[0m --lang contains an empty entry"
+            );
+            process::exit(EX_USAGE);
+        }
+
+        let lang = parse_lang_token(token).unwrap_or_else(|| {
+            eprintln!(
+                "\x1b[31;1mError:\x1b[0m Unknown language '{}' in --lang list",
+                token
+            );
+            process::exit(EX_USAGE);
+        });
+        langs.insert(lang);
+    }
+}
+
+fn parse_lang_token(token: &str) -> Option<Lang> {
+    let key = token.trim().to_ascii_lowercase();
+    let name = match key.as_str() {
+        "rs" | "rust" => LANG_RUST,
+        "py" | "python" => LANG_PYTHON,
+        "c" => LANG_C,
+        "cpp" | "c++" => LANG_CPP,
+        "sh" | "shell" => LANG_SHELL,
+        "yaml" | "yml" => LANG_YAML,
+        "md" | "markdown" | "doc" => LANG_MARKDOWN,
+        "js" | "javascript" => LANG_JS,
+        "java" => LANG_JAVA,
+        _ => return None,
+    };
+
+    Some(Lang::Identified(name.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_lang_token_supports_cpp_aliases() {
+        assert_eq!(
+            parse_lang_token("cpp"),
+            Some(Lang::Identified("C++".to_string()))
+        );
+        assert_eq!(
+            parse_lang_token("c++"),
+            Some(Lang::Identified("C++".to_string()))
+        );
+    }
 }
