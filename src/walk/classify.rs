@@ -94,4 +94,13 @@ mod tests {
         let detected = classify_file(Path::new("main.cpp"), b"int main() { return 0; }\n");
         assert_eq!(detected, Lang::Identified("C++".to_string()));
     }
+
+    #[test]
+    fn cmake_lists_is_not_cpp() {
+        let detected = classify_file(
+            Path::new("CMakeLists.txt"),
+            b"cmake_minimum_required(VERSION 3.20)\n",
+        );
+        assert_ne!(detected, Lang::Identified("C++".to_string()));
+    }
 }

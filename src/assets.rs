@@ -2,7 +2,7 @@
 
 use std::sync::LazyLock;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[allow(dead_code)] // This clears the "never read" warnings
 #[derive(Debug, Deserialize, Clone)]
@@ -23,27 +23,27 @@ pub static LANG_MAP: LazyLock<HashMap<String, Language>> =
 
 // 2. Update EXTENSION_LOOKUP
 pub static EXTENSION_LOOKUP: LazyLock<HashMap<String, &'static str>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+    let mut stable = BTreeMap::new();
     for (name, lang) in LANG_MAP.iter() {
         if let Some(extensions) = &lang.extensions {
             for ext in extensions {
                 let clean_ext = ext.trim_start_matches('.').to_lowercase();
-                map.insert(clean_ext, name.as_str()); 
+                stable.insert(clean_ext, name.as_str());
             }
         }
     }
-    map
+    stable.into_iter().collect()
 });
 
 // 3. Update FILENAME_LOOKUP
 pub static FILENAME_LOOKUP: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+    let mut stable = BTreeMap::new();
     for (name, lang) in LANG_MAP.iter() {
         if let Some(filenames) = &lang.filenames {
             for f in filenames {
-                map.insert(f.clone(), name.clone());
+                stable.insert(f.clone(), name.clone());
             }
         }
     }
-    map
+    stable.into_iter().collect()
 });

@@ -14,7 +14,9 @@ use crate::args::OutputFormat;
 fn main() {
     let config = args::parse_args();
 
-    println!("Scanning: {} (Top {} files)", config.root, config.top_n);
+    if matches!(config.format, OutputFormat::Text) {
+        println!("Scanning: {} (Top {} files)", config.root, config.top_n);
+    }
 
     let start = Instant::now();
     let mut results = walk::parallel_scan(&config.root);

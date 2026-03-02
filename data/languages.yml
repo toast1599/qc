@@ -34,8 +34,6 @@ C++:
     - ".hpp"
     - ".hxx"
     - ".h++"
-  filenames:
-    - "CMakeLists.txt"
 
 Makefile:
   type: programming
